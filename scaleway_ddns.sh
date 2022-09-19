@@ -28,7 +28,7 @@ function set_dns_a_record() {
 	fi
 	local ip=$1
 	local body
-	body=$(cat <<-EOF 
+	body=$(cat <<-EOF
 			{
 				"changes": [
 					{
@@ -62,21 +62,32 @@ function set_dns_a_record() {
 }
 
 # SCRIPT #########################################
+shopt -s expand_aliases
+
 cd "$(dirname "$0")" || exit 1
+
+source ./config
 
 if ! test -e ./config;then
 	echo 'No config file found. Copy the "config-template" file to "config" and set the variables'
 	exit 1
 fi
 
-source ./config
+if test -n "$CURL_PATH";then
+	alias curl="$CURL_PATH"
+fi
 
 # stderr/stdout to tty and logfile
 exec > >(tee -ia "$LOG")
 exec 2>&1
 
+if ! curl -V >> /dev/null;then
+	log_line "[ERROR] Curl not found. Set path in the config file"
+	exit 1
+fi
+
 if [ "$1" != "-c"  ];then
-  log_line '[INFO] Manual run'
+	log_line '[INFO] Manual run'
 fi
 
 if [ "$1" == "--reset"  ] || ! test -e $IP_LOG;then
