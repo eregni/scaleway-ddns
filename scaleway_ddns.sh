@@ -1,4 +1,5 @@
 #!/bin/bash
+
 # Script to update dns record with the scaleway API
 # https://developers.scaleway.com/en/products/domain/dns/api/
 #
@@ -80,7 +81,7 @@ if [ "$1" == "--reset"  ] || ! test -e $IP_LOG;then
 	echo 'no ip cached' > $IP_LOG
 fi
 
-ip="$(curl --silent $WAN_IP_RESOLVER)"
+ip="$(curl --silent "$WAN_IP_RESOLVER")"
 
 if test "$ip" != "$(cat $IP_LOG)";then
 	log_line "[INFO] Ip has changed: $(cat $IP_LOG) -> $ip"
@@ -114,5 +115,5 @@ elif [ "$1" != "-c"  ];then
 fi
 
 # shrink log file to max 200000 lines ~12MB
-tail -n 200000 $LOG >  temp.log
-mv temp.log $LOG
+tail -n 200000 "$LOG" > "$LOG.tmp"
+mv "$LOG.tmp" "$LOG"
