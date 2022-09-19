@@ -62,6 +62,8 @@ function set_dns_a_record() {
 }
 
 # SCRIPT #########################################
+cd "$(dirname "$0")" || exit 1
+
 if ! test -e ./config;then
 	echo 'No config file found. Copy the "config-template" file to "config" and set the variables'
 	exit 1
