@@ -17,6 +17,16 @@ function log_line() {
 	echo "$(date "$DATE_FORMAT") - $1"
 }
 
+function curl_command() {
+	local result
+	result=$(curl --silent CRASH HERE "$@")
+	if [ $? -ne 0 ] ;then
+		log_line "[ERROR] Problem with curl command"
+		exit 1
+	fi
+	echo "$result"
+}
+
 function set_dns_a_record() {
 	local record_id
 	if [ $# -eq 2 ];then
@@ -52,7 +62,7 @@ function set_dns_a_record() {
 		)
 	local url="$API/dns-zones/$ZONE/records"
 	local result
-	result=$(curl --silent --request PATCH --json "$body" --header "$SCW_API_KEY: $SCW_API_SECRET" "$url")
+	result=$(curl_command --request PATCH --json "$body" --header "$SCW_API_KEY: $SCW_API_SECRET" "$url")
 	if [ "$(echo "$result" | jq -r '.records[0].id')" == "null" ];then
 		log_line "[ERROR] Scaleway API: Ip update failed. API message: $(echo "$result" | jq '.message')"
 		exit 1
@@ -83,12 +93,12 @@ if [ "$1" == "--reset"  ] || ! test -e $IP_LOG;then
 	echo 'no ip cached' > $IP_LOG
 fi
 
-ip="$(curl --silent "$WAN_IP_RESOLVER")"
+ip=$(curl_command "$WAN_IP_RESOLVER")
 
 if test "$ip" != "$(cat $IP_LOG)";then
 	log_line "[INFO] Ip has changed: $(cat $IP_LOG) -> $ip"
 	url="$API/dns-zones/$ZONE/records?project_id=$PROJECTID&type=A"
-	records=$(curl --silent --header "X-Auth-Token: $SCW_API_SECRET" "$url")
+	records=$(curl_command --header "X-Auth-Token: $SCW_API_SECRET" "$url")
 	count=$(echo "$records" | jq -r '.total_count')
 	# Add new A record when there is none present
 	if [ $count -le 0 ];then
