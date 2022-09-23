@@ -17,15 +17,45 @@ function log_line() {
 	echo "$(date "$DATE_FORMAT") - $1"
 }
 
-function set_dns_a_record() {
-	local record_id
-	if [ $# -eq 2 ];then
-		record_id="\"id\": \"$2\","
-		echo "$record_id"
-	elif [ $# -ne 1 ];then
-		log_line '[ERROR] Function set_dns_a_record: invalid nr of arguments'
+function delete_dns_record() {
+	if [ $# -ne 1 ];then
+		log_line '[ERROR] Function delete_dns_record: invalid nr of arguments'
 		exit 1
 	fi
+
+	local id=$1
+	local body
+	body=$(cat <<-EOF
+		{
+			"changes": [
+				{
+					"delete": {
+						"id": "$id"
+					}
+				}
+			]
+		}
+		EOF
+	)
+
+	result=$(curl --silent --request PATCH --json "$body" --header "$SCW_API_KEY: $SCW_API_SECRET" "$url") || exit 1
+	if [ "$(echo "$result" | jq -r '.message')" != "null" ];then
+		log_line "[ERROR] Scaleway API: Problem with removal of dns record with id $id. API message: $(echo "$result" | jq '.message')"
+		exit 1
+	else
+		log_line "[INFO] Scaleway API: Dns record with id $id removed"
+	fi
+}
+
+function add_dns_a_record() {
+	local record_id
+	if [ $# -eq 2 ];then
+		delete_dns_record "$2"
+	elif [ $# -ne 1 ];then
+		log_line '[ERROR] Function add_dns_a_record: invalid nr of arguments'
+		exit 1
+	fi
+
 	local ip=$1
 	local body
 	body=$(cat <<-EOF
@@ -35,13 +65,12 @@ function set_dns_a_record() {
 						"add": {
 							"records": [
 								{
-									${record_id:-}
 									"data": "$ip",
 									"name": "",
 									"priority": 5,
 									"ttl": 14400,
 									"type": "A",
-									"comment": "test A record"
+									"comment": "ddns script"
 								}
 							]
 						}
@@ -50,14 +79,15 @@ function set_dns_a_record() {
 			}
 			EOF
 		)
+
 	local url="$API/dns-zones/$ZONE/records"
 	local result
 	result=$(curl --silent --request PATCH --json "$body" --header "$SCW_API_KEY: $SCW_API_SECRET" "$url") || exit 1
-	if [ "$(echo "$result" | jq -r '.records[0].id')" == "null" ];then
+	if [ "$(echo "$result" | jq -r '.message')" != "null" ];then
 		log_line "[ERROR] Scaleway API: Ip update failed. API message: $(echo "$result" | jq '.message')"
 		exit 1
 	else
-		log_line '[INFO] Scaleway API: Ip update succesfull'
+		log_line "[INFO] Scaleway API: Ip update succesfull. New record id: $(echo "$result" | jq -r '.records[0].id')"
 	fi
 }
 
@@ -66,12 +96,12 @@ shopt -s expand_aliases
 
 cd "$(dirname "$0")" || exit 1
 
-source ./config
-
 if ! test -e ./config;then
 	echo 'No config file found. Copy the "config-template" file to "config" and set the variables'
 	exit 1
 fi
+
+source ./config
 
 if test -n "$CURL_PATH";then
 	alias curl="$CURL_PATH"
@@ -104,7 +134,7 @@ if test "$ip" != "$(cat $IP_LOG)";then
 	# Add new A record when there is none present
 	if [ $count -le 0 ];then
 		log_line "[INFO] No dns A record found. Creating new record with ip $ip"
-		set_dns_a_record "$ip"
+		add_dns_a_record "$ip"
 	# Stop script when there are multiple A records present
 	elif [ $count -ne 1 ];then
 		log_line '[ERROR] There should be no more than 1 A record'
@@ -115,7 +145,7 @@ if test "$ip" != "$(cat $IP_LOG)";then
 		record_id=$(echo "$records" | jq -r '.records[0].id')
 		log_line "[INFO] Updating existing dns record with id $record_id: $record_ip -> $ip"
 		if test "$record_ip" != "$ip";then
-			set_dns_a_record "$ip" "$record_id"
+			add_dns_a_record "$ip" "$record_id"
 		else
 			log_line '[INFO] Dns record is already up-to-date. No update required'
 		fi
