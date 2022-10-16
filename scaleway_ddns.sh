@@ -66,7 +66,7 @@ function add_dns_a_record() {
 							"records": [
 								{
 									"data": "$ip",
-									"name": "",
+									"name": "*.$ZONE",
 									"priority": 5,
 									"ttl": 14400,
 									"type": "A",
