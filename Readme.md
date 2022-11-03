@@ -4,7 +4,8 @@ Simple script to update dns A record with the scaleway API
 
 The script needs curl version >= 7.82.0
 
-You need to copy the 'config-template' to 'config' and set the variables
+You need to copy the 'config-template' to 'config' and set the variables.  
+Add a CNAME record for every subdomain in your dns zone config.
 
 Cron example that runs every 5 mins:  
 */5 * * * *     [PATH TO SCRIPT FOLDER]/scaleway-ddns/scaleway-ddns.sh -c  

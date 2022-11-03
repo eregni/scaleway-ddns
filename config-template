@@ -5,3 +5,9 @@ WAN_IP_RESOLVER='ifconfig.me'  # URL to resolve current external ip
 LOG="$HOME/scaleway-ddns.log"  # Path of log file
 DATE_FORMAT='+%c'  # Date format in log file. https://man7.org/linux/man-pages/man1/date.1.html
 CURL_PATH='/usr/local/bin/curl' # Specify curl path. Set empty when curl is located in the default '/usr/bin:/bin' path
+
+# Add subdomains here (only subdomain name):
+declare -a SUBDOMAINS=(
+  [subdomain]
+  [other subdomain]
+)

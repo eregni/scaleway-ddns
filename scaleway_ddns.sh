@@ -48,15 +48,16 @@ function delete_dns_record() {
 }
 
 function add_dns_a_record() {
-	local record_id
+	# First argument = ip address
+	# Second argument (optional) = record name
+	local name 
 	if [ $# -eq 2 ];then
-		delete_dns_record "$2"
-	elif [ $# -ne 1 ];then
+		name=$2
+	elif [ $# -gt 2 ] || [ $# -eq 0 ];then
 		log_line '[ERROR] Function add_dns_a_record: invalid nr of arguments'
 		exit 1
 	fi
 
-	local ip=$1
 	local body
 	body=$(cat <<-EOF
 			{
@@ -65,10 +66,9 @@ function add_dns_a_record() {
 						"add": {
 							"records": [
 								{
-									"data": "$ip",
-									"name": "*",
-									"priority": 5,
-									"ttl": 14400,
+									"data": "$IP",
+									"name": "$name",
+									"ttl": 3600,
 									"type": "A",
 									"comment": "ddns script"
 								}
@@ -87,7 +87,44 @@ function add_dns_a_record() {
 		log_line "[ERROR] Scaleway API: Ip update failed. API message: $(echo "$result" | jq '.message')"
 		exit 1
 	else
-		log_line "[INFO] Scaleway API: Ip update succesfull. New record id: $(echo "$result" | jq -r '.records[0].id')"
+		local domain
+		if test -n "$name"; then domain=$name.$ZONE; else domain=$ZONE; fi
+		log_line "[INFO] Scaleway API: Ip update succesfull for $domain. New record id: $(echo "$result" | jq -r '.records[0].id')"
+	fi
+}
+
+function handle_dns_record(){
+	local name
+	# Argument is used to handle subdomain
+	if [ $# -eq 1 ];then
+		name=$1
+	elif [ $# -gt 1 ];then
+		log_line '[ERROR] Function update_dns_record: invalid nr of arguments'
+		exit 1
+	fi
+
+	url="$API/dns-zones/$ZONE/records?project_id=$PROJECTID&type=A&name=$name&order_by=name_asc"
+	records=$(curl --silent --header "X-Auth-Token: $SCW_API_SECRET" "$url") || exit 1
+	count=$(echo "$records" | jq -r '.total_count')
+	# Add new A record when there is none present
+	if [ "$count" -le 0 ];then
+		log_line "[INFO] ${name:-$ZONE}: No dns A record found. Creating new A record with ip $IP"
+		add_dns_a_record "$IP" "$name"
+	# Stop script when there are multiple A records present
+	elif [ "$count" -ne 1 ] && test -n "$name";then # test -n "$name". Dirty tric -> cannot retrieve A record with empty name with scaleway api (scaleway removes the '@')
+		log_line '[ERROR] Function update_dns_record: There should be no more than 1 A record'
+		exit 1
+	# Update ip on dns record
+	else
+		record_ip=$(echo "$records" | jq -r '.records[0].data')
+		record_id=$(echo "$records" | jq -r '.records[0].id')
+		if test "$record_ip" != "$IP";then
+			log_line "[INFO] ${name:-$ZONE}: Updating existing dns record with id $record_id: $record_ip -> $IP"
+			delete_dns_record "$record_id"
+			add_dns_a_record "$IP" "$name"
+		else
+			log_line "[INFO] ${name:-$ZONE}: Dns record is already up-to-date. No update required"
+		fi
 	fi
 }
 
@@ -124,37 +161,20 @@ if [ "$1" == "--reset"  ] || ! test -e $IP_LOG;then
 	echo 'no ip cached' > $IP_LOG
 fi
 
-ip=$(curl --silent "$WAN_IP_RESOLVER") || exit 1
+IP=$(curl --silent "$WAN_IP_RESOLVER") || exit 1
 
-if test "$ip" != "$(cat $IP_LOG)";then
-	log_line "[INFO] Ip has changed: $(cat $IP_LOG) -> $ip"
-	url="$API/dns-zones/$ZONE/records?project_id=$PROJECTID&type=A"
-	records=$(curl --silent --header "X-Auth-Token: $SCW_API_SECRET" "$url") || exit 1
-	count=$(echo "$records" | jq -r '.total_count')
-	# Add new A record when there is none present
-	if [ $count -le 0 ];then
-		log_line "[INFO] No dns A record found. Creating new record with ip $ip"
-		add_dns_a_record "$ip"
-	# Stop script when there are multiple A records present
-	elif [ $count -ne 1 ];then
-		log_line '[ERROR] There should be no more than 1 A record'
-		exit 1
-	# Update ip on dns record
-	else
-		record_ip=$(echo "$records" | jq -r '.records[0].data')
-		record_id=$(echo "$records" | jq -r '.records[0].id')
-		log_line "[INFO] Updating existing dns record with id $record_id: $record_ip -> $ip"
-		if test "$record_ip" != "$ip";then
-			add_dns_a_record "$ip" "$record_id"
-		else
-			log_line '[INFO] Dns record is already up-to-date. No update required'
-		fi
-	fi
+if test "$IP" != "$(cat $IP_LOG)";then
+	log_line "[INFO] Ip has changed: $(cat $IP_LOG) -> $IP"
+	handle_dns_record
+# Used CNAME records instead of all A records
+#	for subdomain in "${SUBDOMAINS[@]}"; do
+#		handle_dns_record "$subdomain"
+#	done
 
-	echo "$ip" > $IP_LOG
+	echo "$IP" > $IP_LOG
 
 elif [ "$1" != "-c"  ];then
-	log_line "[INFO] Ip has not changed ($ip)"
+	log_line "[INFO] Ip has not changed ($IP)"
 fi
 
 # shrink log file to max 200000 lines ~12MB
