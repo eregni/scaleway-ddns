@@ -1,5 +1,5 @@
 #!/bin/bash
-
+# TODO: more error logging -> when api is not reachable (2x) and when ip resolver is not reachable
 # Script to update dns record with the scaleway API
 # https://developers.scaleway.com/en/products/domain/dns/api/
 #
@@ -50,7 +50,7 @@ function delete_dns_record() {
 function add_dns_a_record() {
 	# First argument = ip address
 	# Second argument (optional) = record name
-	local name 
+	local name
 	if [ $# -eq 2 ];then
 		name=$2
 	elif [ $# -gt 2 ] || [ $# -eq 0 ];then
@@ -165,13 +165,7 @@ IP=$(curl --silent "$WAN_IP_RESOLVER") || exit 1
 
 if test "$IP" != "$(cat $IP_LOG)";then
 	log_line "[INFO] Ip has changed: $(cat $IP_LOG) -> $IP"
-	handle_dns_record
-# Used CNAME records instead of all A records
-#	for subdomain in "${SUBDOMAINS[@]}"; do
-#		handle_dns_record "$subdomain"
-#	done
-
-	echo "$IP" > $IP_LOG
+	handle_dns_record && echo "$IP" > $IP_LOG
 
 elif [ "$1" != "-c"  ];then
 	log_line "[INFO] Ip has not changed ($IP)"
