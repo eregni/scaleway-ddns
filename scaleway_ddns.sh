@@ -129,8 +129,6 @@ function handle_dns_record(){
 }
 
 # SCRIPT #########################################
-shopt -s expand_aliases
-
 cd "$(dirname "$0")" || exit 1
 
 if ! test -e ./config;then
@@ -139,10 +137,6 @@ if ! test -e ./config;then
 fi
 
 source ./config
-
-if test -n "$CURL_PATH";then
-	alias curl="$CURL_PATH"
-fi
 
 # stderr/stdout to tty and logfile
 exec > >(tee -ia "$LOG")
