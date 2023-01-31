@@ -11,10 +11,18 @@
 API='https://api.scaleway.com/domain/v2beta1'
 SCW_API_KEY='X-Auth-Token'
 IP_LOG='/tmp/cached_ip'
-
 # FUNCTIONS ######################################
 function log_line() {
 	echo "$(date "$DATE_FORMAT") - $1"
+}
+
+function mail_log(){
+	if [ $# -ne 1 ];then
+		log_line '[ERROR] Function mail_log: invalid nr of arguments. Need an email body'
+		exit 1
+	fi
+
+	echo "Update scaleway ip script: $1" | mail -s 'update scaleway ip' $MAIL_TO
 }
 
 function delete_dns_record() {
@@ -41,6 +49,9 @@ function delete_dns_record() {
 	result=$(curl --silent --request PATCH --json "$body" --header "$SCW_API_KEY: $SCW_API_SECRET" "$url") || exit 1
 	if [ "$(echo "$result" | jq -r '.message')" != "null" ];then
 		log_line "[ERROR] Scaleway API: Problem with removal of dns record with id $id. API message: $(echo "$result" | jq '.message')"
+		if $MAILS;then
+			mail_log "There was a problem during the last DNS A record update. Please check the logs"
+		fi
 		exit 1
 	else
 		log_line "[INFO] Scaleway API: Dns record with id $id removed"
@@ -85,11 +96,17 @@ function add_dns_a_record() {
 	result=$(curl --silent --request PATCH --json "$body" --header "$SCW_API_KEY: $SCW_API_SECRET" "$url") || exit 1
 	if [ "$(echo "$result" | jq -r '.message')" != "null" ];then
 		log_line "[ERROR] Scaleway API: Ip update failed. API message: $(echo "$result" | jq '.message')"
+		if $MAILS;then
+			mail_log "There was a problem during the last DNS A record update. Please check the logs"
+		fi
 		exit 1
 	else
 		local domain
 		if test -n "$name"; then domain=$name.$ZONE; else domain=$ZONE; fi
 		log_line "[INFO] Scaleway API: Ip update succesfull for $domain. New record id: $(echo "$result" | jq -r '.records[0].id')"
+		if $MAILS;then
+			mail_log "DNS A record has been updated. New ip = $IP"
+		fi
 	fi
 }
 
@@ -143,7 +160,7 @@ exec > >(tee -ia "$LOG")
 exec 2>&1
 
 if ! curl -V >> /dev/null;then
-	log_line "[ERROR] Curl not found. Set path in the config file"
+	log_line "[ERROR] Curl not found."
 	exit 1
 fi
 
