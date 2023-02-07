@@ -112,7 +112,7 @@ function add_dns_a_record() {
 
 function handle_dns_record(){
 	local name
-	# Argument is used to handle subdomain
+	# Argument is used to handle a subdomain
 	if [ $# -eq 1 ];then
 		name=$1
 	elif [ $# -gt 1 ];then
@@ -159,9 +159,16 @@ source ./config
 exec > >(tee -ia "$LOG")
 exec 2>&1
 
+# Check for curl
 if ! curl -V >> /dev/null;then
 	log_line "[ERROR] Curl not found."
 	exit 1
+fi
+
+# Check internet connection
+if ! ping -c 1 9.9.9.9 >> /dev/null;then
+  log_line '[ERROR] Network connection not OK. Aborting...'
+  exit 1
 fi
 
 if [ "$1" != "-c"  ];then
