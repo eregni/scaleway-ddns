@@ -11,6 +11,8 @@
 API='https://api.scaleway.com/domain/v2beta1'
 SCW_API_KEY='X-Auth-Token'
 IP_LOG='/tmp/cached_ip'
+RE_IP='^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])$'
+
 # FUNCTIONS ######################################
 function log_line() {
 	echo "$(date "$DATE_FORMAT") - $1"
@@ -161,7 +163,7 @@ exec 2>&1
 
 # Check for curl
 if ! curl -V >> /dev/null;then
-	log_line "[ERROR] Curl not found."
+	log_line '[ERROR] Curl not found.'
 	exit 1
 fi
 
@@ -176,10 +178,18 @@ if [ "$1" != "-c"  ];then
 fi
 
 if [ "$1" == "--reset"  ] || ! test -e $IP_LOG;then
-	echo 'no ip cached' > $IP_LOG
+	echo "no ip cached" > $IP_LOG
 fi
 
 IP=$(curl --silent "$WAN_IP_RESOLVER") || exit 1
+# Check response
+if ! [[ $IP =~ $RE_IP ]];then
+        if $MAILS;then
+                mail_log "There was a problem during the last DNS A record update. Please check the logs"
+        fi
+	log_line "[ERROR] Respone '$IP' from $WAN_IP_RESOLVER was not a valid ip. Aborting..."
+	exit 1
+fi
 
 if test "$IP" != "$(cat $IP_LOG)";then
 	log_line "[INFO] Ip has changed: $(cat $IP_LOG) -> $IP"
