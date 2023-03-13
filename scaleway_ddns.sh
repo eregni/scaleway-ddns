@@ -181,20 +181,19 @@ if [ "$1" == "--reset"  ] || ! test -e $IP_LOG;then
 	echo "no ip cached" > $IP_LOG
 fi
 
-IP=$(curl --silent "$WAN_IP_RESOLVER") || exit 1
-# Check response
+# Resolve and check wan ip
+IP=$(curl --silent --retry 3 --retry-delay 1 "$WAN_IP_RESOLVER") || exit 1
 if ! [[ $IP =~ $RE_IP ]];then
-        if $MAILS;then
-                mail_log "There was a problem during the last DNS A record update. Please check the logs"
-        fi
-	log_line "[ERROR] Respone '$IP' from $WAN_IP_RESOLVER was not a valid ip. Aborting..."
+	if $MAILS;then
+			mail_log "There was a problem during the last DNS A record update. Please check the logs"
+	fi
+	log_line "[ERROR] Respone '$IP' from $WAN_IP_RESOLVER was not a valid ip. Aborted after multiple attempts"
 	exit 1
 fi
 
 if test "$IP" != "$(cat $IP_LOG)";then
 	log_line "[INFO] Ip has changed: $(cat $IP_LOG) -> $IP"
 	handle_dns_record && echo "$IP" > $IP_LOG
-
 elif [ "$1" != "-c"  ];then
 	log_line "[INFO] Ip has not changed ($IP)"
 fi
