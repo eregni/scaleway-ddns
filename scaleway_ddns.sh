@@ -182,7 +182,14 @@ if [ "$1" == "--reset"  ] || ! test -e $IP_LOG;then
 fi
 
 # Resolve and check wan ip
-IP=$(curl --silent --retry 3 --retry-delay 1 "$WAN_IP_RESOLVER") || exit 1
+RETRY=3
+while [ $RETRY > 0 ];do
+	IP=$(curl --silent "$WAN_IP_RESOLVER")
+	if [[ $IP  =~ $RE_IP ]];then
+		break
+	fi
+	let RETRY--
+done
 if ! [[ $IP =~ $RE_IP ]];then
 	if $MAILS;then
 			mail_log "There was a problem during the last DNS A record update. Please check the logs"
