@@ -1,5 +1,4 @@
 #!/bin/bash
-# TODO: more error logging -> when api is not reachable (2x) and when ip resolver is not reachable
 # Script to update dns record with the scaleway API
 # https://developers.scaleway.com/en/products/domain/dns/api/
 #
@@ -12,6 +11,7 @@ API='https://api.scaleway.com/domain/v2beta1'
 SCW_API_KEY='X-Auth-Token'
 IP_LOG='/tmp/cached_ip'
 RE_IP='^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])$'
+TIMEOUT=5
 
 # FUNCTIONS ######################################
 function log_line() {
@@ -48,7 +48,7 @@ function delete_dns_record() {
 		EOF
 	)
 
-	result=$(curl --silent --request PATCH --json "$body" --header "$SCW_API_KEY: $SCW_API_SECRET" "$url") || exit 1
+	result=$(curl --connect-timeout "$TIMEOUT" --silent --request PATCH --json "$body" --header "$SCW_API_KEY: $SCW_API_SECRET" "$url") || exit 1
 	if [ "$(echo "$result" | jq -r '.message')" != "null" ];then
 		log_line "[ERROR] Scaleway API: Problem with removal of dns record with id $id. API message: $(echo "$result" | jq '.message')"
 		if $MAILS;then
@@ -95,7 +95,7 @@ function add_dns_a_record() {
 
 	local url="$API/dns-zones/$ZONE/records"
 	local result
-	result=$(curl --silent --request PATCH --json "$body" --header "$SCW_API_KEY: $SCW_API_SECRET" "$url") || exit 1
+	result=$(curl --connect-timeout "$TIMEOUT" --silent --request PATCH --json "$body" --header "$SCW_API_KEY: $SCW_API_SECRET" "$url") || exit 1
 	if [ "$(echo "$result" | jq -r '.message')" != "null" ];then
 		log_line "[ERROR] Scaleway API: Ip update failed. API message: $(echo "$result" | jq '.message')"
 		if $MAILS;then
@@ -123,7 +123,7 @@ function handle_dns_record(){
 	fi
 
 	url="$API/dns-zones/$ZONE/records?project_id=$PROJECTID&type=A&name=$name&order_by=name_asc"
-	records=$(curl --silent --header "X-Auth-Token: $SCW_API_SECRET" "$url") || exit 1
+	records=$(curl --connect-timeout "$TIMEOUT" --silent --header "X-Auth-Token: $SCW_API_SECRET" "$url") || exit 1
 	count=$(echo "$records" | jq -r '.total_count')
 	# Add new A record when there is none present
 	if [ "$count" -le 0 ];then
@@ -184,7 +184,7 @@ fi
 # Resolve and check wan ip
 RETRY=3
 while [ $RETRY > 0 ];do
-	IP=$(curl --silent "$WAN_IP_RESOLVER")
+	IP=$(curl --connect-timeout "$TIMEOUT" --silent "$WAN_IP_RESOLVER")
 	if [[ $IP  =~ $RE_IP ]];then
 		break
 	fi
