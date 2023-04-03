@@ -19,11 +19,13 @@ function log_line() {
 }
 
 function mail_log(){
+	if ! $MAILS;then
+		return
+	fi
 	if [ $# -ne 1 ];then
 		log_line '[ERROR] Function mail_log: invalid nr of arguments. Need an email body'
 		exit 1
 	fi
-
 	echo "Update scaleway ip script: $1" | mail -s 'update scaleway ip' $MAIL_TO
 }
 
@@ -48,12 +50,11 @@ function delete_dns_record() {
 		EOF
 	)
 
-	result=$(curl --connect-timeout "$TIMEOUT" --silent --request PATCH --json "$body" --header "$SCW_API_KEY: $SCW_API_SECRET" "$url") || exit 1
+	result=$(curl --connect-timeout "$TIMEOUT" --silent --request PATCH --json "$body" --header "$SCW_API_KEY: $SCW_API_SECRET" "$url")
 	if [ "$(echo "$result" | jq -r '.message')" != "null" ];then
 		log_line "[ERROR] Scaleway API: Problem with removal of dns record with id $id. API message: $(echo "$result" | jq '.message')"
-		if $MAILS;then
-			mail_log "There was a problem during the last DNS A record update. Please check the logs"
-		fi
+		echo $result
+		mail_log "There was a problem during the last DNS A record update. Please check the logs"
 		exit 1
 	else
 		log_line "[INFO] Scaleway API: Dns record with id $id removed"
@@ -95,20 +96,16 @@ function add_dns_a_record() {
 
 	local url="$API/dns-zones/$ZONE/records"
 	local result
-	result=$(curl --connect-timeout "$TIMEOUT" --silent --request PATCH --json "$body" --header "$SCW_API_KEY: $SCW_API_SECRET" "$url") || exit 1
+	result=$(curl --connect-timeout "$TIMEOUT" --silent --request PATCH --json "$body" --header "$SCW_API_KEY: $SCW_API_SECRET" "$url")
 	if [ "$(echo "$result" | jq -r '.message')" != "null" ];then
 		log_line "[ERROR] Scaleway API: Ip update failed. API message: $(echo "$result" | jq '.message')"
-		if $MAILS;then
-			mail_log "There was a problem during the last DNS A record update. Please check the logs"
-		fi
+		mail_log "There was a problem during the last DNS A record update. Please check the logs"
 		exit 1
 	else
 		local domain
 		if test -n "$name"; then domain=$name.$ZONE; else domain=$ZONE; fi
 		log_line "[INFO] Scaleway API: Ip update succesfull for $domain. New record id: $(echo "$result" | jq -r '.records[0].id')"
-		if $MAILS;then
-			mail_log "DNS A record has been updated. New ip = $IP"
-		fi
+		mail_log "DNS A record has been updated. New ip = $IP"
 	fi
 }
 
@@ -123,7 +120,12 @@ function handle_dns_record(){
 	fi
 
 	url="$API/dns-zones/$ZONE/records?project_id=$PROJECTID&type=A&name=$name&order_by=name_asc"
-	records=$(curl --connect-timeout "$TIMEOUT" --silent --header "X-Auth-Token: $SCW_API_SECRET" "$url") || exit 1
+	records=$(curl --connect-timeout "$TIMEOUT" --silent --header "X-Auth-Token: $SCW_API_SECRET" "$url")
+	if [ $? -ne 0 ];then
+		log_line "[ERROR] Scaleway API: Failed to get DNS A record."
+		mail_log "There was a problem during the last DNS A record update. Please check the logs"
+		exit 1
+	fi
 	count=$(echo "$records" | jq -r '.total_count')
 	# Add new A record when there is none present
 	if [ "$count" -le 0 ];then
@@ -191,9 +193,7 @@ while [ $RETRY > 0 ];do
 	let RETRY--
 done
 if ! [[ $IP =~ $RE_IP ]];then
-	if $MAILS;then
-			mail_log "There was a problem during the last DNS A record update. Please check the logs"
-	fi
+	mail_log "There was a problem during the last DNS A record update. Please check the logs"
 	log_line "[ERROR] Respone '$IP' from $WAN_IP_RESOLVER was not a valid ip. Aborted after multiple attempts"
 	exit 1
 fi
