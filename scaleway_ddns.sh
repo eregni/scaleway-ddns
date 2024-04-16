@@ -42,11 +42,16 @@ function mail_log(){
 	if ! $MAILS;then
 		return
 	fi
+	if grep -e "^$(date '+%a %e %b %Y %H').* Alert mail send to $MAIL_TO" $LOG >> /dev/null; then
+		return  # Limit alert mails to one every hour
+	fi
 	if [ $# -ne 1 ];then
 		log_line '[ERROR] Function mail_log: invalid nr of arguments. Need an email body'
 		exit 1
 	fi
 	echo "Update scaleway ip script: $1" | mail -s 'update scaleway ip' "$MAIL_TO"
+	log_line "[INFO] Alert mail send to $MAIL_TO"
+
 }
 
 function delete_dns_record() {
