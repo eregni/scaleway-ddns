@@ -50,7 +50,7 @@ function mail_log(){
 		exit 1
 	fi
 	echo "Update scaleway ip script: $1" | mail -s 'update scaleway ip' "$MAIL_TO"
-	log_line "[INFO] Alert mail send to $MAIL_TO"
+	log_line "[INFO] Mail send to $MAIL_TO"
 
 }
 
@@ -128,7 +128,7 @@ function add_dns_a_record() {
 		exit 1
 	else
 		log_line "[INFO] Scaleway API: Ip update succesfull for $zone. New record id: $(echo "$result" | jq -r '.records[0].id')"
-		mail_log "DNS A record has been updated for $zone. New ip = $ip"
+		#mail_log "DNS A record has been updated for $zone. New ip = $ip"
 	fi
 }
 
